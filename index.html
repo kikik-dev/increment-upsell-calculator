@@ -37,11 +37,13 @@ li b{display:block}
 <div class="tabs" role="tablist">
   <button class="tab" role="tab" id="t-up" aria-selected="true" type="button">Upsell</button>
   <button class="tab" role="tab" id="t-down" aria-selected="false" type="button">Downsell</button>
+  <button class="tab" role="tab" id="t-comb" aria-selected="false" type="button">Combined</button>
 </div>
 <div class="card">
   <div class="grid">
-    <div><label for="a">Base value</label><input id="a" type="number" step="any" value="26557.09"></div>
+    <div><label for="a" id="al">Base value</label><input id="a" type="number" step="any" value="26557.09"></div>
     <div><label for="b" id="bl">Upsell value</label><input id="b" type="number" step="any" value="7398.92"></div>
+    <div id="cw" hidden><label for="c">Downsell value</label><input id="c" type="number" step="any" value="3462.73"></div>
     <div><label for="rate">Increment rate</label>
       <select id="rate"><option value="5">5%</option><option value="10">10%</option></select></div>
     <div><label for="tax">Tax (%)</label><input id="tax" type="number" step="any" value="10"></div>
@@ -63,14 +65,35 @@ li b{display:block}
     $("t-up").setAttribute("aria-selected",m==="up");
     $("t-down").setAttribute("aria-selected",m==="down");
     $("app").className=m==="down"?"down":"";
-    $("bl").textContent=m==="up"?"Upsell value":"Downsell value";
+    $("t-comb").setAttribute("aria-selected",m==="comb");
+    $("cw").hidden=m!=="comb";
+    $("al").textContent=m==="comb"?"Base price":"Base value";
+    $("bl").textContent=m==="down"?"Downsell value":"Upsell value";
     calc();
   }
   function calc(){
     var a=parseFloat($("a").value),b=parseFloat($("b").value),rate=parseFloat($("rate").value),
         tax=parseFloat($("tax").value),mo=parseInt($("mo").value,10),rem=parseInt($("rem").value,10);
     var err=$("err");err.textContent="";
-    if([a,b,rate,tax,mo,rem].some(isNaN)||mo<1||rem<1){err.textContent="Fill in every field with valid numbers (months must be at least 1).";$("out").hidden=true;return}
+    var c=parseFloat($("c").value);
+    if([a,b,rate,tax,mo,rem].concat(mode==="comb"?[c]:[]).some(isNaN)||mo<1||rem<1){err.textContent="Fill in every field with valid numbers (months must be at least 1).";$("out").hidden=true;return}
+    if(mode==="comb"){
+      var net=a+b-c,ib=net*rate/100,mv=ib/mo,rm=mv*rem,tx=rm*tax/100,tot=rm+tx,iv=tot/rem;
+      var cr=[
+        ["Net value",fmt(a,2)+" + "+fmt(b,2)+" − "+fmt(c,2),fmt(net,2)],
+        ["Increment value ("+rate+"%)",fmt(net,2)+" × "+rate+"%",fmt(ib,4)],
+        ["Monthly increment value",fmt(ib,4)+" ÷ "+mo,fmt(mv,2)+" per month"],
+        ["Value for remaining "+rem+" months",fmt(mv,4)+" × "+rem,fmt(rm,2)],
+        ["Add tax ("+tax+"%)",fmt(rm,2)+" + "+fmt(tx,2),fmt(tot,2)],
+        ["Monthly invoice amount",fmt(tot,5)+" ÷ "+rem,fmt(iv,2)+" per month"]
+      ];
+      $("steps").innerHTML=cr.map(function(x,i){
+        return "<li><b>"+(i+1)+". "+x[0]+"</b><span class='f'>"+x[1]+" = </span><span class='r'>"+x[2]+"</span></li>";
+      }).join("");
+      $("final").innerHTML="<b>Summary</b><br>Net value: "+fmt(net,2)+"<br>"+rate+"% increment: "+fmt(ib,3)+"<br>Monthly increment: "+fmt(mv,2)+"<br>Remaining "+rem+" months, excl. tax: "+fmt(rm,2)+"<br>Total incl. "+tax+"% tax: "+fmt(tot,2)+"<br>Monthly invoice incl. tax: <b>"+fmt(iv,2)+"</b>";
+      $("out").hidden=false;
+      return;
+    }
     var sign=mode==="down"?-1:1;
     var label=mode==="down"?"Downsell":"Upsell";
     var diff=a-b;
@@ -95,7 +118,8 @@ li b{display:block}
   }
   $("t-up").addEventListener("click",function(){setMode("up")});
   $("t-down").addEventListener("click",function(){setMode("down")});
-  ["a","b","rate","tax","mo","rem"].forEach(function(i){$(i).addEventListener("input",calc)});
+  $("t-comb").addEventListener("click",function(){setMode("comb")});
+  ["a","b","c","rate","tax","mo","rem"].forEach(function(i){$(i).addEventListener("input",calc)});
   calc();
 })();
 </script>
