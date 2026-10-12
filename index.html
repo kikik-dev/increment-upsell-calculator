@@ -41,14 +41,14 @@ li b{display:block}
 </div>
 <div class="card">
   <div class="grid">
-    <div><label for="a" id="al">Base value</label><input id="a" type="number" step="any" value="26557.09"></div>
-    <div><label for="b" id="bl">Upsell value</label><input id="b" type="number" step="any" value="7398.92"></div>
-    <div id="cw" hidden><label for="c">Downsell value</label><input id="c" type="number" step="any" value="3462.73"></div>
+    <div><label for="a" id="al">Base value</label><input id="a" type="text" inputmode="decimal" autocomplete="off" value="26557.09"></div>
+    <div><label for="b" id="bl">Upsell value</label><input id="b" type="text" inputmode="decimal" autocomplete="off" value="7398.92"></div>
+    <div id="cw" hidden><label for="c">Downsell value</label><input id="c" type="text" inputmode="decimal" autocomplete="off" value="3462.73"></div>
     <div><label for="rate">Increment rate</label>
       <select id="rate"><option value="5">5%</option><option value="10">10%</option></select></div>
-    <div><label for="tax">Tax (%)</label><input id="tax" type="number" step="any" value="10"></div>
-    <div><label for="mo">Months in year</label><input id="mo" type="number" min="1" value="12"></div>
-    <div><label for="rem">Remaining months</label><input id="rem" type="number" min="1" value="3"></div>
+    <div><label for="tax">Tax (%)</label><input id="tax" type="text" inputmode="decimal" autocomplete="off" value="10"></div>
+    <div><label for="mo">Months in year</label><input id="mo" type="text" inputmode="numeric" autocomplete="off" value="12"></div>
+    <div><label for="rem">Remaining months</label><input id="rem" type="text" inputmode="numeric" autocomplete="off" value="3"></div>
   </div>
   <div class="err" id="err" role="alert"></div>
 </div>
@@ -60,6 +60,21 @@ li b{display:block}
   var mode="up";
   var fmt=function(n,d){return n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d})};
   var r2=function(n){return Math.round((n+Number.EPSILON)*100)/100};
+  function parseNum(s){
+    s=String(s==null?"":s).trim();
+    if(!s)return NaN;
+    var hc=s.indexOf(",")>-1,hd=s.indexOf(".")>-1;
+    if(hc&&hd){ // both separators: the last one is the decimal separator
+      s=s.lastIndexOf(",")>s.lastIndexOf(".")?s.replace(/\./g,"").replace(/,/g,"."):s.replace(/,/g,"");
+    }else if(hc){ // comma only: decimal if not exactly 3 trailing digits (e.g. 8,93), else thousands (e.g. 8,237)
+      var p=s.split(",");
+      s=(p.length===2&&p[1].length!==3)?p[0]+"."+p[1]:s.replace(/,/g,"");
+    }
+    s=s.replace(/[^0-9.\-]/g,""); // strip currency symbols, spaces, %, etc.
+    if(!s||s==="-"||s===".")return NaN;
+    var v=parseFloat(s);
+    return isNaN(v)?NaN:v;
+  }
   function setMode(m){
     mode=m;
     $("t-up").setAttribute("aria-selected",m==="up");
@@ -72,10 +87,10 @@ li b{display:block}
     calc();
   }
   function calc(){
-    var a=parseFloat($("a").value),b=parseFloat($("b").value),rate=parseFloat($("rate").value),
-        tax=parseFloat($("tax").value),mo=parseInt($("mo").value,10),rem=parseInt($("rem").value,10);
+    var a=parseNum($("a").value),b=parseNum($("b").value),rate=parseFloat($("rate").value),
+        tax=parseNum($("tax").value),mo=parseInt(parseNum($("mo").value),10),rem=parseInt(parseNum($("rem").value),10);
     var err=$("err");err.textContent="";
-    var c=parseFloat($("c").value);
+    var c=parseNum($("c").value);
     if([a,b,rate,tax,mo,rem].concat(mode==="comb"?[c]:[]).some(isNaN)||mo<1||rem<1){err.textContent="Fill in every field with valid numbers (months must be at least 1).";$("out").hidden=true;return}
     if(mode==="comb"){
       var net=a+b-c,ib=net*rate/100,mv=ib/mo,rm=mv*rem,tx=rm*tax/100,tot=rm+tx,iv=tot/rem;
@@ -94,32 +109,37 @@ li b{display:block}
       $("out").hidden=false;
       return;
     }
-    var sign=mode==="down"?-1:1;
     var label=mode==="down"?"Downsell":"Upsell";
-    var diff=a-b;
-    var base=sign*diff*rate/100;
+    var base=(mode==="down"?a-b:a+b)*rate/100;
     var monthly=r2(base/mo);
     var remaining=r2(monthly*rem);
     var taxAmt=r2(remaining*tax/100);
     var total=r2(remaining+taxAmt);
     var inv=r2(total/rem);
     var rows=[
-      ["Base value ("+rate+"% "+label.toLowerCase()+")",(sign<0?"−":"")+"("+fmt(a,2)+" − "+fmt(b,2)+") × "+rate+"%",fmt(base,4)],
+      ["Increment value ("+rate+"% "+label.toLowerCase()+")","("+fmt(a,2)+(mode==="down"?" − ":" + ")+fmt(b,2)+") × "+rate+"%",fmt(base,4)],
       ["Monthly "+label.toLowerCase()+" value",fmt(base,4)+" ÷ "+mo,fmt(monthly,2)+" per month"],
       ["Value for remaining "+rem+" months",fmt(monthly,2)+" × "+rem,fmt(remaining,2)],
-      ["Add tax ("+tax+"%)",fmt(remaining,2)+" + ("+fmt(taxAmt,2)+")",fmt(total,2)],
-      ["Monthly "+(mode==="down"?"credit":"invoice")+" amount",fmt(total,2)+" ÷ "+rem,fmt(inv,2)+" per month"]
+      ["Add tax ("+tax+"%)",fmt(remaining,2)+" + "+fmt(taxAmt,2),fmt(total,2)],
+      ["Monthly invoice amount",fmt(total,2)+" ÷ "+rem,fmt(inv,2)+" per month"]
     ];
     $("steps").innerHTML=rows.map(function(x,i){
       return "<li><b>"+(i+1)+". "+x[0]+"</b><span class='f'>"+x[1]+" = </span><span class='r'>"+x[2]+"</span></li>";
     }).join("");
-    $("final").innerHTML="Monthly "+(mode==="down"?"credit":"invoice")+": <b>"+fmt(inv,2)+"</b>";
+    $("final").innerHTML="Monthly invoice: <b>"+fmt(inv,2)+"</b>";
     $("out").hidden=false;
   }
   $("t-up").addEventListener("click",function(){setMode("up")});
   $("t-down").addEventListener("click",function(){setMode("down")});
   $("t-comb").addEventListener("click",function(){setMode("comb")});
-  ["a","b","c","rate","tax","mo","rem"].forEach(function(i){$(i).addEventListener("input",calc)});
+  ["a","b","c","tax","mo","rem"].forEach(function(i){
+    $(i).addEventListener("input",calc);
+    $(i).addEventListener("blur",function(){
+      var el=$(i),v=parseNum(el.value);
+      if(!isNaN(v)&&String(v)!==el.value.trim()){el.value=String(v);calc()}
+    });
+  });
+  $("rate").addEventListener("input",calc);
   calc();
 })();
 </script>
